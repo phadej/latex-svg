@@ -1,4 +1,3 @@
-packages:
-  latex-formulae-hakyll
-  latex-formulae-image
-  latex-formulae-pandoc
+packages: latex-svg-hakyll
+packages: latex-svg-image
+packages: latex-svg-pandoc
