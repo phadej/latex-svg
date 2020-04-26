@@ -3,7 +3,7 @@ import Image.LaTeX.Render
 import Text.Pandoc.JSON
 
 main :: IO ()
-main = toJSONFilter $ convertFormulaSVG env fopts
+main = toJSONFilter $ convertFormulaSvgPandoc env fopts
   where
     env = defaultEnv { latexFontSize = 14 }
     fopts = defaultPandocFormulaOptions
@@ -14,6 +14,7 @@ main = toJSONFilter $ convertFormulaSVG env fopts
                 , "\\usepackage[T1]{fontenc}"
                 , "\\usepackage{lmodern}"
                 , "\\usepackage{xcolor}"
+                , "\\usepackage{tikz-cd}"
                 ]
             }
         }

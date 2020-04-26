@@ -17,6 +17,7 @@ module Image.LaTeX.Render (
     FormulaOptions (..),
     displaymath,
     math,
+    defaultFormulaOptions,
     ) where
 
 import Control.Applicative        (some, (<|>))
@@ -26,7 +27,7 @@ import Control.Monad.IO.Class     (MonadIO (..))
 import Control.Monad.Trans.Except (ExceptT (..), runExceptT, throwE, withExceptT)
 import Data.Char                  (isSpace)
 import Data.List                  (foldl', isPrefixOf, sortOn, stripPrefix)
-import Data.Maybe                 (fromMaybe)
+import Data.Maybe                 (fromMaybe, maybeToList)
 import Numeric                    (showFFloat)
 import System.Exit                (ExitCode (..))
 import System.FilePath            ((<.>), (</>))
@@ -84,8 +85,8 @@ data EnvironmentOptions = EnvironmentOptions
   deriving (Eq, Show, Read, Ord)
 
 data FormulaOptions = FormulaOptions
-    { preamble    :: String  -- ^ LaTeX preamble to use. Put your @\usepackage@ commands here.@ commands here.
-    , environment :: String  -- ^ LaTeX environment in which the equation will be typeset, usually @math@ or @displaymath@
+    { preamble    :: String        -- ^ LaTeX preamble to use. Put your @\usepackage@ commands here.@ commands here.
+    , environment :: Maybe String  -- ^ LaTeX environment in which the equation will be typeset, usually 'math' or 'displaymath'
     }
   deriving (Eq, Show, Read, Ord)
 
@@ -93,13 +94,25 @@ data FormulaOptions = FormulaOptions
 -- Defaults
 -------------------------------------------------------------------------------
 
--- | Use the @amsmath@ package, the @displaymath@ environment.
-displaymath :: FormulaOptions
-displaymath = FormulaOptions "\\usepackage{amsmath}\\usepackage{amsfonts}\\usepackage[T1]{fontenc}\\usepackage{lmodern}" "displaymath"
+-- | Use the @amsmath@, @amsfonts@ and @lmodern@ packages.
+defaultFormulaOptions :: FormulaOptions
+defaultFormulaOptions = FormulaOptions
+    { environment = Nothing
+    , preamble = concat
+        [ "\\usepackage{amsmath}"
+        , "\\usepackage{amsfonts}"
+        , "\\usepackage[T1]{fontenc}"
+        , "\\usepackage{lmodern}"
+        ]
+    }
 
--- | Use the @amsmath@ package, the @math@ environment.
+-- | Use the @amsmath@, @amsfonts@ and @lmodern@ package, the @displaymath@ environment.
+displaymath :: FormulaOptions
+displaymath = defaultFormulaOptions { environment = Just "displaymath" }
+
+-- | Use the @amsmath@, @amsfonts@ and @lmodern@ package, the @math@ environment.
 math :: FormulaOptions
-math = displaymath { environment = "math" }
+math = defaultFormulaOptions { environment = Just "math" }
 
 -- | Sensible defaults for system environments. Works if @dvisvgm@ and @latex@ are recent enough and in your @$PATH@.
 defaultEnv :: EnvironmentOptions
@@ -134,10 +147,11 @@ imageForFormula EnvironmentOptions {..} FormulaOptions {..} eqn =
                 , preamble
                 , "\\begin{document}"
                 , "\\begin{preview}"
-                , "\\begin{" ++ environment ++ "}"
-                ] ++ filter (not . all isSpace) (lines eqn) ++
-                [ "\\end{" ++ environment ++ "}"
-                , "\\end{preview}"
+                ] ++
+                [ "\\begin{" ++ e ++ "}" | e <- maybeToList environment ] ++
+                filter (not . all isSpace) (lines eqn) ++
+                [ "\\end{" ++ e ++ "}"  | e <- maybeToList environment ] ++
+                [ "\\end{preview}"
                 , "\\end{document}"
                 ]
 
