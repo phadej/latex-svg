@@ -17,6 +17,7 @@ module Image.LaTeX.Render (
     FormulaOptions (..),
     displaymath,
     math,
+    defaultFormulaOptions,
     ) where
 
 import Control.Applicative        (some, (<|>))
@@ -25,7 +26,8 @@ import Control.Monad              (when)
 import Control.Monad.IO.Class     (MonadIO (..))
 import Control.Monad.Trans.Except (ExceptT (..), runExceptT, throwE, withExceptT)
 import Data.Char                  (isSpace)
-import Data.List                  (foldl', isPrefixOf)
+import Data.List                  (foldl', isPrefixOf, sortOn, stripPrefix)
+import Data.Maybe                 (fromMaybe, maybeToList)
 import Numeric                    (showFFloat)
 import System.Exit                (ExitCode (..))
 import System.FilePath            ((<.>), (</>))
@@ -75,6 +77,7 @@ data EnvironmentOptions = EnvironmentOptions
     , dvisvgmCommand   :: String                  -- ^ Command to use for @dvisvgm@, default is @dvisvgm@
     , latexArgs        :: [String]                -- ^ Any additional arguments for @latex@
     , dvisvgmArgs      :: [String]                -- ^ Any additional arguments for @dvisvgm@
+    , latexFontSize    :: Int                     -- ^ Document font size, one of @8,9,10,11,12,14,17,20@. If not @10,11,12@ then @extarticle@ document size is used.
     , tempDir          :: TempDirectoryHandling   -- ^ How to handle temporary files
     , tempFileBaseName :: String                  -- ^ The base name to use for the temporary files.
     , globalCache      :: Bool                    -- ^ Cache outputs globally in @XDG_CACHE/latex-svg@
@@ -82,8 +85,8 @@ data EnvironmentOptions = EnvironmentOptions
   deriving (Eq, Show, Read, Ord)
 
 data FormulaOptions = FormulaOptions
-    { preamble    :: String  -- ^ LaTeX preamble to use. Put your @\usepackage@ commands here.@ commands here.
-    , environment :: String  -- ^ LaTeX environment in which the equation will be typeset, usually @math@ or @displaymath@
+    { preamble    :: String        -- ^ LaTeX preamble to use. Put your @\usepackage@ commands here.@ commands here.
+    , environment :: Maybe String  -- ^ LaTeX environment in which the equation will be typeset, usually 'math' or 'displaymath'
     }
   deriving (Eq, Show, Read, Ord)
 
@@ -91,13 +94,25 @@ data FormulaOptions = FormulaOptions
 -- Defaults
 -------------------------------------------------------------------------------
 
--- | Use the @amsmath@ package, the @displaymath@ environment.
-displaymath :: FormulaOptions
-displaymath = FormulaOptions "\\usepackage{amsmath}\\usepackage{amsfonts}\\usepackage{stmaryrd}" "displaymath"
+-- | Use the @amsmath@, @amsfonts@ and @lmodern@ packages.
+defaultFormulaOptions :: FormulaOptions
+defaultFormulaOptions = FormulaOptions
+    { environment = Nothing
+    , preamble = concat
+        [ "\\usepackage{amsmath}"
+        , "\\usepackage{amsfonts}"
+        , "\\usepackage[T1]{fontenc}"
+        , "\\usepackage{lmodern}"
+        ]
+    }
 
--- | Use the @amsmath@ package, the @math@ environment.
+-- | Use the @amsmath@, @amsfonts@ and @lmodern@ package, the @displaymath@ environment.
+displaymath :: FormulaOptions
+displaymath = defaultFormulaOptions { environment = Just "displaymath" }
+
+-- | Use the @amsmath@, @amsfonts@ and @lmodern@ package, the @math@ environment.
 math :: FormulaOptions
-math = displaymath { environment = "math" }
+math = defaultFormulaOptions { environment = Just "math" }
 
 -- | Sensible defaults for system environments. Works if @dvisvgm@ and @latex@ are recent enough and in your @$PATH@.
 defaultEnv :: EnvironmentOptions
@@ -105,7 +120,9 @@ defaultEnv = EnvironmentOptions
     { latexCommand     = "latex"
     , dvisvgmCommand   = "dvisvgm"
     , latexArgs        = []
-    , dvisvgmArgs      = ["--no-fonts=1", "--clipjoin"] -- "--exact-bbox" is good idea if you have recent dvisvgm
+    -- "--exact-bbox" is good idea if you have recent dvisvgm
+    , dvisvgmArgs      = ["--no-fonts=1", "--clipjoin", "--bbox=min", "--exact"]
+    , latexFontSize    = 12
     , tempDir          = UseSystemTempDir "latex-eqn-temp"
     , tempFileBaseName = "working"
     , globalCache      = False
@@ -124,18 +141,17 @@ imageForFormula EnvironmentOptions {..} FormulaOptions {..} eqn =
                 [ "% " ++ latexCommand ++ " " ++ show latexArgs
                 , "% " ++ dvisvgmCommand ++ " " ++ show dvisvgmArgs
                 , "\\nonstopmode"
-                , "\\documentclass[12pt]{article}"
+                , "\\documentclass[" ++ show latexFontSize' ++ "pt]{" ++ documentClass ++ "}"
                 , "\\pagestyle{empty}"
                 , "\\usepackage[active,tightpage]{preview}"
-                , "\\usepackage{amsmath}"
-                , "\\usepackage{xcolor}"
                 , preamble
                 , "\\begin{document}"
                 , "\\begin{preview}"
-                , "\\begin{" ++ environment ++ "}"
-                ] ++ filter (not . all isSpace) (lines eqn) ++
-                [ "\\end{" ++ environment ++ "}"
-                , "\\end{preview}"
+                ] ++
+                [ "\\begin{" ++ e ++ "}" | e <- maybeToList environment ] ++
+                filter (not . all isSpace) (lines eqn) ++
+                [ "\\end{" ++ e ++ "}"  | e <- maybeToList environment ] ++
+                [ "\\end{preview}"
                 , "\\end{document}"
                 ]
 
@@ -153,6 +169,18 @@ imageForFormula EnvironmentOptions {..} FormulaOptions {..} eqn =
 
             return $ addTitle eqn svg
   where
+    latexFontSize'
+        | latexFontSize < 8  = 8
+        | latexFontSize > 20 = 20
+        | otherwise          = head $ sortOn (\s -> abs (s - latexFontSize)) sizes
+
+    sizes :: [Int]
+    sizes = [8,9,10,11,12,14,17,20]
+
+    documentClass
+        | latexFontSize' `elem` [10,11,12] = "article"
+        | otherwise                        = "extarticle"
+
     io :: NFData a => IO a -> ExceptT RenderError IO a
     io = withExceptT IOException . tryIO
 
@@ -236,10 +264,11 @@ getBaseline str = getBaseline' sfx
 -- | Alter 'SVG' image to be embeddable in HTML page, i.e.align baseline.
 --
 -- * Add @style="vertical-align: baseline-correction"@
+-- * Remove @id="page1"@
 --
 alterForHTML :: SVG -> SVG
 alterForHTML xml =
-    pfx ++ " style='vertical-align: " ++ showFFloat (Just 6) baseline "" ++ "pt'" ++ sfx
+    pfx ++ " style='vertical-align: " ++ showFFloat (Just 6) baseline "" ++ "pt'" ++ stripId sfx
   where
     (_,  svg)   = spanL "<svg" xml
     (pfx, sfx) = spanL viewboxMarker svg
@@ -247,6 +276,14 @@ alterForHTML xml =
 
 viewboxMarker :: String
 viewboxMarker = " viewBox='"
+
+stripId :: String -> String
+stripId str = pfx ++ sfx'
+  where
+    (pfx, sfx) = spanL needle str
+    sfx'       = fromMaybe sfx (stripPrefix needle sfx)
+
+    needle = "id='page1'"
 
 getBaseline' :: String -> Double
 getBaseline' sfx = case P.parse parser "<input>" sfx of

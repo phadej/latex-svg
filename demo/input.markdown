@@ -36,4 +36,12 @@ $$
 \end{aligned}
 $$
 
+Raw LaTeX
+---------
+
+\begin{tikzcd}
+A \arrow[d, "g"] \arrow[r, "f"] & B \arrow[r, "\alpha"] \arrow[d, "\gamma"] & D \arrow[d, "\beta"] \\
+C \arrow[r, "h"] & B' \arrow[r, "\lambda"] & D'
+\end{tikzcd}
+
 End

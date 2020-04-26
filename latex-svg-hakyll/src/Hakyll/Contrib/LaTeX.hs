@@ -13,6 +13,7 @@ module Hakyll.Contrib.LaTeX (
     ) where
 
 import Data.Char              (isSpace)
+import Data.Maybe             (fromMaybe)
 import Hakyll.Core.Compiler   (Compiler, unsafeCompiler)
 import Text.Pandoc.Definition (Pandoc)
 
@@ -45,9 +46,9 @@ initFormulaCompilerSVG
 initFormulaCompilerSVG cs eo = do
     mImageForFormula <- curry <$> memoizeLru (Just cs) (uncurry drawFormula)
     let eachFormula x y = do
-          putStrLn $ "    formula (" ++ environment x ++ ") \"" ++ equationPreview y ++ "\""
+          putStrLn $ "    formula (" ++ environment' x ++ ") \"" ++ equationPreview y ++ "\""
           mImageForFormula x y
-    return $ \fo -> unsafeCompiler . convertAllFormulaeSVGWith eachFormula fo
+    return $ \fo -> unsafeCompiler . convertFormulaSvgPandocWith eachFormula fo
   where
     drawFormula x y = do
         putStrLn "      drawing..."
@@ -72,10 +73,10 @@ initFormulaCompilerSVGPure
 initFormulaCompilerSVGPure eo fo pandoc = do
     let mImageForFormula = drawFormula
     let eachFormula x y = do
-          putStrLn $ "    formula (" ++ environment x ++ ") \"" ++ equationPreview y ++ "\""
+          putStrLn $ "    formula (" ++ environment' x ++ ") \"" ++ equationPreview y ++ "\""
           mImageForFormula x y
 
-    unsafeCompiler (convertAllFormulaeSVGWith eachFormula fo pandoc)
+    unsafeCompiler (convertFormulaSvgPandocWith eachFormula fo pandoc)
   where
     drawFormula x y = do
         putStrLn "      drawing..."
@@ -91,10 +92,10 @@ compileFormulaeSVG
     -> Pandoc -> Compiler Pandoc
 compileFormulaeSVG eo po =
     let eachFormula x y = do
-          putStrLn $ "    formula (" ++ environment x ++ ") \"" ++ equationPreview y ++ "\""
+          putStrLn $ "    formula (" ++ environment' x ++ ") \"" ++ equationPreview y ++ "\""
           putStrLn   "      drawing..."
           imageForFormula eo x y
-    in unsafeCompiler . convertAllFormulaeSVGWith eachFormula po
+    in unsafeCompiler . convertFormulaSvgPandocWith eachFormula po
 
 equationPreview :: String -> String
 equationPreview x'
@@ -114,3 +115,6 @@ memoizeLru msize action = do
                 ret <- action arg
                 LRU.insert arg ret lru
                 return ret
+
+environment' :: FormulaOptions -> String
+environment'  = fromMaybe "-" . environment
