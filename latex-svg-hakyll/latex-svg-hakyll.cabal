@@ -1,6 +1,6 @@
 cabal-version: 2.2
 name:          latex-svg-hakyll
-version:       0.1
+version:       0.2
 synopsis:      Use actual LaTeX to render formulae inside Hakyll pages
 description:
   This library provides functions to render all math formulae inside
@@ -31,7 +31,7 @@ library
   build-depends:
     , base              >=4.10      && <4.14
     , hakyll            ^>=4.12.5.2 || ^>=4.13.0.0
-    , latex-svg-image   ^>=0.1
-    , latex-svg-pandoc  ^>=0.1
+    , latex-svg-image   ^>=0.2
+    , latex-svg-pandoc  ^>=0.2
     , lrucache          ^>=1.2
     , pandoc-types      ^>=1.17.6.1 || ^>=1.20

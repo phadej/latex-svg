@@ -25,7 +25,8 @@ import Control.Monad              (when)
 import Control.Monad.IO.Class     (MonadIO (..))
 import Control.Monad.Trans.Except (ExceptT (..), runExceptT, throwE, withExceptT)
 import Data.Char                  (isSpace)
-import Data.List                  (foldl', isPrefixOf, sortOn)
+import Data.List                  (foldl', isPrefixOf, sortOn, stripPrefix)
+import Data.Maybe                 (fromMaybe)
 import Numeric                    (showFFloat)
 import System.Exit                (ExitCode (..))
 import System.FilePath            ((<.>), (</>))
@@ -249,10 +250,11 @@ getBaseline str = getBaseline' sfx
 -- | Alter 'SVG' image to be embeddable in HTML page, i.e.align baseline.
 --
 -- * Add @style="vertical-align: baseline-correction"@
+-- * Remove @id="page1"@
 --
 alterForHTML :: SVG -> SVG
 alterForHTML xml =
-    pfx ++ " style='vertical-align: " ++ showFFloat (Just 6) baseline "" ++ "pt'" ++ sfx
+    pfx ++ " style='vertical-align: " ++ showFFloat (Just 6) baseline "" ++ "pt'" ++ stripId sfx
   where
     (_,  svg)   = spanL "<svg" xml
     (pfx, sfx) = spanL viewboxMarker svg
@@ -260,6 +262,14 @@ alterForHTML xml =
 
 viewboxMarker :: String
 viewboxMarker = " viewBox='"
+
+stripId :: String -> String
+stripId str = pfx ++ sfx'
+  where
+    (pfx, sfx) = spanL needle str
+    sfx'       = fromMaybe sfx (stripPrefix needle sfx)
+
+    needle = "id='page1'"
 
 getBaseline' :: String -> Double
 getBaseline' sfx = case P.parse parser "<input>" sfx of
