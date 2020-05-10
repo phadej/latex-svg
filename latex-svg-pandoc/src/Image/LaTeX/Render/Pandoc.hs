@@ -95,7 +95,7 @@ convertFormulaSvgBlockWith
     -> PandocFormulaOptions -- ^ Formula display settings
     -> Block -> IO Block
 convertFormulaSvgBlockWith f o (RawBlock format s)
-    | format == Format "tex"
+    | format == Format "tex" || format == Format "latex"
     = do
         res <- f (formulaOptions o Nothing) (toString s)
         return $ Para $ singleton $ case res of
@@ -180,7 +180,7 @@ convertFormulaFilesBlockWith
     -> PandocFormulaOptions         -- ^ Formula display settings
     -> Block -> IO Block
 convertFormulaFilesBlockWith f ns bn o (RawBlock format s)
-    | format == Format "tex"
+    | format == Format "tex" || format == Format "latex"
     = do
         res <- f (formulaOptions o Nothing) (toString s)
         case res of
