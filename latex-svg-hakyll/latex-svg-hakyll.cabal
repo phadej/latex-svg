@@ -18,7 +18,7 @@ category:      Image
 build-type:    Simple
 
 -- cabal-fmt: fragment ../tested-with.fragment
-tested-with:   GHC ==8.2.2 || ==8.4.4 || ==8.6.5 || ==8.8.4
+tested-with:   GHC ==8.10.7 || ==9.6.4 || ==9.8.1
 
 source-repository head
   type:     git
@@ -31,9 +31,9 @@ library
   ghc-options:      -Wall
   exposed-modules:  Hakyll.Contrib.LaTeX
   build-depends:
-    , base              >=4.10     && <4.14
-    , hakyll            ^>=4.12.5.2 || ^>=4.13.0.0
+    , base              >=4.14.3   && <4.20
+    , hakyll            ^>=4.16.2
     , latex-svg-image   ^>=0.2
-    , latex-svg-pandoc  ^>=0.2
-    , lrucache          ^>=1.2
-    , pandoc-types      ^>=1.17.6.1 || ^>=1.20
+    , latex-svg-pandoc  ^>=0.2.1
+    , lrucache          ^>=1.2.0.1
+    , pandoc-types      ^>=1.23.1

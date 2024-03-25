@@ -3,6 +3,7 @@
 module Image.LaTeX.Render (
     -- * Rendering Formulas
     imageForFormula,
+    renderToFile,
     Formula, SVG,
     -- * BaseLine
     BaseLine, getBaseline, alterForHTML,
@@ -16,7 +17,7 @@ module Image.LaTeX.Render (
     -- ** Formula Options
     FormulaOptions (..),
     displaymath,
-    math,
+    math, tikz,
     defaultFormulaOptions,
     ) where
 
@@ -25,6 +26,7 @@ import Control.DeepSeq            (NFData (..), ($!!))
 import Control.Monad              (when)
 import Control.Monad.IO.Class     (MonadIO (..))
 import Control.Monad.Trans.Except (ExceptT (..), runExceptT, throwE, withExceptT)
+import Data.Bitraversable         (bimapM)
 import Data.Char                  (isSpace)
 import Data.List                  (foldl', isPrefixOf, sortOn, stripPrefix)
 import Data.Maybe                 (fromMaybe, maybeToList)
@@ -114,6 +116,16 @@ displaymath = defaultFormulaOptions { environment = Just "displaymath" }
 math :: FormulaOptions
 math = defaultFormulaOptions { environment = Just "math" }
 
+-- | Use the @tikzpicture@ environment, optionally providing more tikz libraries
+-- to add to the preamble.
+tikz :: [String] -> FormulaOptions
+tikz libraries = defaultFormulaOptions {
+    environment = Just "tikzpicture"
+  , preamble = preamble defaultFormulaOptions
+            ++ "\\usepackage{tikz}"
+            ++ mconcat [ "\\usetikzlibrary{" ++ l ++ "}" | l <- libraries ]
+  }
+
 -- | Sensible defaults for system environments. Works if @dvisvgm@ and @latex@ are recent enough and in your @$PATH@.
 defaultEnv :: EnvironmentOptions
 defaultEnv = EnvironmentOptions
@@ -141,18 +153,15 @@ imageForFormula EnvironmentOptions {..} FormulaOptions {..} eqn =
                 [ "% " ++ latexCommand ++ " " ++ show latexArgs
                 , "% " ++ dvisvgmCommand ++ " " ++ show dvisvgmArgs
                 , "\\nonstopmode"
-                , "\\documentclass[" ++ show latexFontSize' ++ "pt]{" ++ documentClass ++ "}"
+                , documentClassDeclaration
                 , "\\pagestyle{empty}"
-                , "\\usepackage[active,tightpage]{preview}"
                 , preamble
                 , "\\begin{document}"
-                , "\\begin{preview}"
                 ] ++
                 [ "\\begin{" ++ e ++ "}" | e <- maybeToList environment ] ++
                 filter (not . all isSpace) (lines eqn) ++
                 [ "\\end{" ++ e ++ "}"  | e <- maybeToList environment ] ++
-                [ "\\end{preview}"
-                , "\\end{document}"
+                [ "\\end{document}"
                 ]
 
         cached doc $ do
@@ -169,6 +178,16 @@ imageForFormula EnvironmentOptions {..} FormulaOptions {..} eqn =
 
             return $ addTitle eqn svg
   where
+    documentClassDeclaration = mconcat
+      [ "\\documentclass["
+      , show latexFontSize'
+      , "pt,preview,dvisvgm"
+      , if isTikz then ",tikz" else ""
+      , "]{"
+      , documentClass
+      , "}"
+      ]
+
     latexFontSize'
         | latexFontSize < 8  = 8
         | latexFontSize > 20 = 20
@@ -177,7 +196,10 @@ imageForFormula EnvironmentOptions {..} FormulaOptions {..} eqn =
     sizes :: [Int]
     sizes = [8,9,10,11,12,14,17,20]
 
+    isTikz = environment == Just "tikzpicture"
+
     documentClass
+        | isTikz                           = "standalone"
         | latexFontSize' `elem` [10,11,12] = "article"
         | otherwise                        = "extarticle"
 
@@ -215,6 +237,15 @@ imageForFormula EnvironmentOptions {..} FormulaOptions {..} eqn =
 
     handler :: ExceptT e IO a -> E.IOException -> IO (Either e a)
     handler rgt _ = runExceptT rgt
+
+-- | Render a formula and produce a file at the given filepath.
+renderToFile :: FilePath
+             -> EnvironmentOptions
+             -> FormulaOptions
+             -> Formula
+             -> IO (Either RenderError ())
+renderToFile fp env opts formula =
+  bimapM pure (writeFile fp) =<< imageForFormula env opts formula
 
 -------------------------------------------------------------------------------
 -- Baseline and other postprocessing
