@@ -30,8 +30,10 @@ import Data.List                  (foldl', isPrefixOf, sortOn, stripPrefix)
 import Data.Maybe                 (fromMaybe, maybeToList)
 import Numeric                    (showFFloat)
 import System.Exit                (ExitCode (..))
-import System.FilePath            ((<.>), (</>))
-import System.IO.Temp             (withSystemTempDirectory, withTempDirectory)
+import System.FilePath            (splitFileName, (<.>), (</>))
+import System.IO                  (hPutStrLn, stderr)
+import System.IO.Error            (catchIOError)
+import System.IO.Temp             (withSystemTempDirectory, withTempDirectory, writeTempFile)
 
 -- import System.IO
 
@@ -207,7 +209,10 @@ imageForFormula EnvironmentOptions {..} FormulaOptions {..} eqn =
 
             readFile path `orElse` do
                 result <- action
-                io $ writeFile path result
+                -- Write atomically for safe concurrent cache access.
+                -- Treat unexpected cache update errors as non-fatal.
+                io $ atomicWriteFile path result
+                        `catchIOError` \err -> hPutStrLn stderr ("latex-svg: error updating " <> show path <> " (ignoring): " <> show err)
                 return result
 
     orElse :: IO a -> ExceptT e IO a -> ExceptT e IO a
@@ -215,6 +220,12 @@ imageForFormula EnvironmentOptions {..} FormulaOptions {..} eqn =
 
     handler :: ExceptT e IO a -> E.IOException -> IO (Either e a)
     handler rgt _ = runExceptT rgt
+
+    atomicWriteFile :: FilePath -> String -> IO ()
+    atomicWriteFile path content = do
+        let (dir, template) = splitFileName path
+        tmpPath <- writeTempFile dir template content
+        Dir.renameFile tmpPath path
 
 -------------------------------------------------------------------------------
 -- Baseline and other postprocessing
